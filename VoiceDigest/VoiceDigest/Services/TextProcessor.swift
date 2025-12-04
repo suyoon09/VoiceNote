@@ -252,19 +252,16 @@ final class TextProcessor {
             return "No notes recorded today."
         }
 
-        var summary = ""
+        var sections: [String] = []
 
         // Group by category
         let notesByCategory = Dictionary(grouping: notes, by: { $0.category })
 
-        // Build summary for each category
+        // Build fluid summary for each category
         for category in NoteCategory.allCases {
             if let categoryNotes = notesByCategory[category], !categoryNotes.isEmpty {
-                summary += "\n\(category.emoji) \(category.rawValue) (\(categoryNotes.count))\n"
-                for note in categoryNotes {
-                    let time = formatTime(note.createdAt)
-                    summary += "  \(time): \(note.cleanedContent)\n"
-                }
+                let categorySection = buildCategorySummary(category: category, notes: categoryNotes)
+                sections.append(categorySection)
             }
         }
 
@@ -276,13 +273,48 @@ final class TextProcessor {
         let topKeywords = Array(keywordCounts.prefix(5).map { $0.key })
 
         if !topKeywords.isEmpty {
-            summary += "\n🔑 Top Keywords: \(topKeywords.joined(separator: ", "))\n"
+            sections.append("🔑 Key themes: \(topKeywords.joined(separator: ", "))")
         }
 
         // Add statistics
-        summary += "\n📊 Summary: \(notes.count) note(s) recorded"
+        let noteWord = notes.count == 1 ? "note" : "notes"
+        sections.append("📊 You recorded \(notes.count) \(noteWord) today")
 
-        return summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sections.joined(separator: "\n\n")
+    }
+
+    private func buildCategorySummary(category: NoteCategory, notes: [VoiceNote]) -> String {
+        let header = "\(category.emoji) \(category.rawValue)"
+
+        if notes.count == 1 {
+            let note = notes[0]
+            let timeStr = formatTime(note.createdAt)
+            return "\(header)\nAt \(timeStr), you noted: \(note.cleanedContent)"
+        }
+
+        // Multiple notes - create a fluid summary
+        var lines: [String] = [header]
+
+        // Group by time periods for natural flow
+        let sortedNotes = notes.sorted { $0.createdAt < $1.createdAt }
+
+        for (index, note) in sortedNotes.enumerated() {
+            let timeStr = formatTime(note.createdAt)
+            let connector = getConnector(for: index, total: sortedNotes.count)
+            lines.append("\(connector)\(timeStr): \(note.cleanedContent)")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func getConnector(for index: Int, total: Int) -> String {
+        if index == 0 {
+            return "• "
+        } else if index == total - 1 {
+            return "• "
+        } else {
+            return "• "
+        }
     }
 
     private func formatTime(_ date: Date) -> String {

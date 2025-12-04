@@ -253,7 +253,7 @@ final class VoiceNoteManager {
             audioRecorder.deleteAudioFile(named: fileName)
             await MainActor.run {
                 recordingState = .idle
-                if error == .noSpeechDetected {
+                if error == .noSpeechDetected || error == .timeout {
                     showToast(message: .noSpeechDetected)
                 } else {
                     showToast(message: .error(error.localizedDescription))

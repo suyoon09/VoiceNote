@@ -7,6 +7,7 @@ enum SpeechRecognizerError: Error, LocalizedError {
     case notAvailable
     case noSpeechDetected
     case audioFileNotFound
+    case timeout
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +21,8 @@ enum SpeechRecognizerError: Error, LocalizedError {
             return "No speech was detected in the recording."
         case .audioFileNotFound:
             return "Audio file not found."
+        case .timeout:
+            return "Recognition timed out. No speech detected."
         }
     }
 }
@@ -32,6 +35,8 @@ final class SpeechRecognizer {
 
     var isProcessing = false
     var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
+
+    private let transcriptionTimeout: TimeInterval = 10.0
 
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -71,47 +76,78 @@ final class SpeechRecognizer {
             throw SpeechRecognizerError.permissionDenied
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            isProcessing = true
+        return try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask {
+                try await self.performTranscription(recognizer: recognizer, audioFileURL: audioFileURL)
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(self.transcriptionTimeout * 1_000_000_000))
+                throw SpeechRecognizerError.timeout
+            }
+
+            guard let result = try await group.next() else {
+                throw SpeechRecognizerError.recognitionFailed
+            }
+
+            group.cancelAll()
+            return result
+        }
+    }
+
+    private func performTranscription(recognizer: SFSpeechRecognizer, audioFileURL: URL) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.main.async {
+                self.isProcessing = true
+            }
 
             let request = SFSpeechURLRecognitionRequest(url: audioFileURL)
             request.shouldReportPartialResults = false
             request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
 
-            // Add task quality hint for better accuracy
             if #available(iOS 16.0, *) {
                 request.addsPunctuation = true
             }
 
-            recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                defer {
-                    DispatchQueue.main.async {
-                        self?.isProcessing = false
-                    }
+            var hasResumed = false
+            let resumeOnce: (Result<String, Error>) -> Void = { result in
+                guard !hasResumed else { return }
+                hasResumed = true
+                DispatchQueue.main.async {
+                    self.isProcessing = false
                 }
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: value)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
 
+            recognitionTask = recognizer.recognitionTask(with: request) { result, error in
                 if let error = error {
                     let nsError = error as NSError
-                    // Check if it's a "no speech detected" error
                     if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110 {
-                        continuation.resume(throwing: SpeechRecognizerError.noSpeechDetected)
+                        resumeOnce(.failure(SpeechRecognizerError.noSpeechDetected))
+                    } else if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1101 {
+                        resumeOnce(.failure(SpeechRecognizerError.noSpeechDetected))
                     } else {
-                        continuation.resume(throwing: SpeechRecognizerError.recognitionFailed)
+                        resumeOnce(.failure(SpeechRecognizerError.recognitionFailed))
                     }
                     return
                 }
 
                 guard let result = result else {
-                    continuation.resume(throwing: SpeechRecognizerError.recognitionFailed)
+                    resumeOnce(.failure(SpeechRecognizerError.recognitionFailed))
                     return
                 }
 
                 if result.isFinal {
                     let transcript = result.bestTranscription.formattedString
                     if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        continuation.resume(throwing: SpeechRecognizerError.noSpeechDetected)
+                        resumeOnce(.failure(SpeechRecognizerError.noSpeechDetected))
                     } else {
-                        continuation.resume(returning: transcript)
+                        resumeOnce(.success(transcript))
                     }
                 }
             }
