@@ -3,7 +3,7 @@ import SwiftUI
 import UserNotifications
 import EventKit
 
-enum RecordingState {
+enum RecordingState: Equatable {
     case idle
     case recording
     case processing
