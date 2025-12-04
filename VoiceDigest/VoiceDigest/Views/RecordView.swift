@@ -3,185 +3,84 @@ import SwiftUI
 struct RecordView: View {
     @Environment(VoiceNoteManager.self) private var manager
 
-    @State private var pulseAnimation = false
-    @State private var buttonScale: CGFloat = 1.0
-    @State private var rotationAngle: Double = 0
-    @State private var innerRingRotation: Double = 0
-    @State private var glowIntensity: Double = 0.5
-    @State private var particleOffset: CGFloat = 0
+    @State private var isPressed = false
+    @State private var blockOffsets: [CGSize] = Array(repeating: .zero, count: 9)
+    @State private var blockScales: [CGFloat] = Array(repeating: 1.0, count: 9)
+    @State private var idleAnimation = false
 
-    private let primaryGlow = Color(red: 0.0, green: 0.8, blue: 1.0)
-    private let secondaryGlow = Color(red: 0.6, green: 0.2, blue: 1.0)
-    private let recordingGlow = Color(red: 1.0, green: 0.2, blue: 0.4)
+    private let accentColor = Color(red: 0.2, green: 0.2, blue: 0.25)
+    private let recordingColor = Color(red: 0.95, green: 0.3, blue: 0.3)
 
     var body: some View {
-        GeometryReader { geometry in
+        NavigationStack {
             ZStack {
-                // Futuristic gradient background
-                backgroundGradient
+                // Clean white background
+                Color.white
+                    .ignoresSafeArea()
 
-                // Floating particles
-                floatingParticles(in: geometry.size)
-
-                // Main content
-                VStack(spacing: 32) {
+                VStack(spacing: 48) {
                     Spacer()
 
-                    // AI Status indicator
-                    aiStatusView
+                    // Status
+                    statusView
 
-                    // Recording duration
+                    // Duration when recording
                     if manager.isRecording {
                         durationView
+                            .transition(.opacity.combined(with: .scale))
                     }
 
                     Spacer()
 
-                    // Main record button with rings
-                    ZStack {
-                        // Outer rotating rings
-                        outerRingsView
-
-                        // Core button
-                        recordButton
-                    }
-                    .frame(width: 280, height: 280)
+                    // AI Block Button
+                    aiBlockButton
+                        .frame(width: 200, height: 200)
 
                     Spacer()
 
-                    // Instructions
+                    // Instruction
                     instructionView
 
-                    // Today's note count
+                    // Today's count
                     todayCountView
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 32)
                 }
                 .padding()
             }
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            startAnimations()
-            Task {
-                await manager.requestPermissions()
+            .navigationTitle("Record")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                startIdleAnimation()
+                Task {
+                    await manager.requestPermissions()
+                }
             }
         }
     }
 
-    // MARK: - Background
+    // MARK: - Status View
 
-    private var backgroundGradient: some View {
-        ZStack {
-            // Base dark gradient
-            LinearGradient(
-                colors: [
-                    Color(red: 0.02, green: 0.02, blue: 0.08),
-                    Color(red: 0.05, green: 0.03, blue: 0.15),
-                    Color(red: 0.02, green: 0.02, blue: 0.08)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            // Radial glow from center
-            RadialGradient(
-                colors: [
-                    (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.15),
-                    Color.clear
-                ],
-                center: .center,
-                startRadius: 50,
-                endRadius: 400
-            )
-            .blur(radius: 60)
-
-            // Ambient glow spots
+    private var statusView: some View {
+        HStack(spacing: 8) {
             Circle()
-                .fill(secondaryGlow.opacity(0.1))
-                .frame(width: 300, height: 300)
-                .blur(radius: 100)
-                .offset(x: -150, y: -300)
-
-            Circle()
-                .fill(primaryGlow.opacity(0.08))
-                .frame(width: 250, height: 250)
-                .blur(radius: 80)
-                .offset(x: 150, y: 400)
-        }
-    }
-
-    // MARK: - Floating Particles
-
-    private func floatingParticles(in size: CGSize) -> some View {
-        ZStack {
-            ForEach(0..<12, id: \.self) { index in
-                Circle()
-                    .fill(
-                        (index % 2 == 0 ? primaryGlow : secondaryGlow)
-                            .opacity(Double.random(in: 0.1...0.3))
-                    )
-                    .frame(width: CGFloat.random(in: 2...6), height: CGFloat.random(in: 2...6))
-                    .offset(
-                        x: CGFloat.random(in: -size.width/2...size.width/2),
-                        y: sin(particleOffset + Double(index) * 0.5) * 20 + CGFloat.random(in: -size.height/3...size.height/3)
-                    )
-                    .blur(radius: 1)
-            }
-        }
-    }
-
-    // MARK: - AI Status View
-
-    private var aiStatusView: some View {
-        HStack(spacing: 12) {
-            // Pulsing AI indicator
-            Circle()
-                .fill(manager.isRecording ? recordingGlow : primaryGlow)
+                .fill(manager.isRecording ? recordingColor : accentColor)
                 .frame(width: 8, height: 8)
-                .shadow(color: manager.isRecording ? recordingGlow : primaryGlow, radius: 8)
-                .scaleEffect(glowIntensity)
 
             Text(statusText)
-                .font(.system(size: 18, weight: .medium, design: .rounded))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: manager.isRecording ? [recordingGlow, .white] : [primaryGlow, .white],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .shadow(color: (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.5), radius: 10)
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(manager.isRecording ? recordingColor : accentColor)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(
-            Capsule()
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    Capsule()
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.5),
-                                    Color.white.opacity(0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
-        )
+        .animation(.easeInOut(duration: 0.3), value: manager.isRecording)
     }
 
     private var statusText: String {
         switch manager.recordingState {
         case .idle:
-            return "AI Ready"
+            return "Ready"
         case .recording:
-            return "Listening..."
+            return "Listening"
         case .processing:
-            return "Processing..."
+            return "Processing"
         case .error:
             return "Error"
         }
@@ -191,175 +90,55 @@ struct RecordView: View {
 
     private var durationView: some View {
         Text(formatDuration(manager.recordingDuration))
-            .font(.system(size: 56, weight: .ultraLight, design: .monospaced))
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [recordingGlow, .white],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .shadow(color: recordingGlow.opacity(0.5), radius: 20)
-            .transition(.scale.combined(with: .opacity))
+            .font(.system(size: 48, weight: .light, design: .monospaced))
+            .foregroundStyle(recordingColor)
     }
 
-    // MARK: - Outer Rings
+    // MARK: - AI Block Button
 
-    private var outerRingsView: some View {
-        ZStack {
-            // Outermost ring - slow rotation
-            Circle()
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            primaryGlow.opacity(0.3),
-                            secondaryGlow.opacity(0.1),
-                            primaryGlow.opacity(0.3),
-                            Color.clear,
-                            primaryGlow.opacity(0.3)
-                        ],
-                        center: .center
-                    ),
-                    lineWidth: 2
-                )
-                .frame(width: 260, height: 260)
-                .rotationEffect(.degrees(rotationAngle))
+    private var aiBlockButton: some View {
+        let columns = 3
+        let rows = 3
+        let blockSize: CGFloat = 44
+        let spacing: CGFloat = 12
 
-            // Middle ring - dashed
-            Circle()
-                .stroke(
-                    (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.4),
-                    style: StrokeStyle(lineWidth: 1, dash: [4, 8])
-                )
-                .frame(width: 230, height: 230)
-                .rotationEffect(.degrees(-rotationAngle * 0.7))
-
-            // Inner ring - faster rotation
-            Circle()
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            (manager.isRecording ? recordingGlow : secondaryGlow).opacity(0.5),
-                            Color.clear,
-                            (manager.isRecording ? recordingGlow : secondaryGlow).opacity(0.5)
-                        ],
-                        center: .center
-                    ),
-                    lineWidth: 3
-                )
-                .frame(width: 200, height: 200)
-                .rotationEffect(.degrees(innerRingRotation))
-
-            // Pulse rings when recording
+        return ZStack {
+            // Subtle shadow/glow when recording
             if manager.isRecording {
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .stroke(recordingGlow.opacity(0.3), lineWidth: 2)
-                        .frame(width: 180, height: 180)
-                        .scaleEffect(pulseAnimation ? 1.5 + CGFloat(index) * 0.2 : 1.0)
-                        .opacity(pulseAnimation ? 0 : 0.6)
-                        .animation(
-                            .easeOut(duration: 1.5)
-                            .repeatForever(autoreverses: false)
-                            .delay(Double(index) * 0.3),
-                            value: pulseAnimation
-                        )
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(recordingColor.opacity(0.1))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 30)
+            }
+
+            // Grid of blocks
+            VStack(spacing: spacing) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: spacing) {
+                        ForEach(0..<columns, id: \.self) { col in
+                            let index = row * columns + col
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(manager.isRecording ? recordingColor : accentColor)
+                                .frame(width: blockSize, height: blockSize)
+                                .scaleEffect(blockScales[index])
+                                .offset(blockOffsets[index])
+                        }
+                    }
                 }
             }
         }
-    }
-
-    // MARK: - Record Button
-
-    private var recordButton: some View {
-        ZStack {
-            // Glow base
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.4),
-                            Color.clear
-                        ],
-                        center: .center,
-                        startRadius: 60,
-                        endRadius: 100
-                    )
-                )
-                .frame(width: 180, height: 180)
-                .blur(radius: 20)
-
-            // Main button
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            manager.isRecording ? recordingGlow.opacity(0.9) : primaryGlow.opacity(0.8),
-                            manager.isRecording ? recordingGlow.opacity(0.6) : secondaryGlow.opacity(0.6),
-                            Color(red: 0.1, green: 0.1, blue: 0.2)
-                        ],
-                        center: .topLeading,
-                        startRadius: 0,
-                        endRadius: 150
-                    )
-                )
-                .frame(width: 140, height: 140)
-                .overlay(
-                    Circle()
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.6),
-                                    (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.3),
-                                    .white.opacity(0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 2
-                        )
-                )
-                .shadow(
-                    color: (manager.isRecording ? recordingGlow : primaryGlow).opacity(0.6),
-                    radius: 30
-                )
-                .scaleEffect(buttonScale)
-                .overlay {
-                    if manager.isProcessing {
-                        // Processing spinner
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 3)
-                                .frame(width: 60, height: 60)
-
-                            Circle()
-                                .trim(from: 0, to: 0.3)
-                                .stroke(
-                                    LinearGradient(colors: [primaryGlow, .white], startPoint: .leading, endPoint: .trailing),
-                                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                                )
-                                .frame(width: 60, height: 60)
-                                .rotationEffect(.degrees(rotationAngle * 3))
-                        }
-                    } else {
-                        // Icon
-                        Image(systemName: manager.isRecording ? "waveform" : "mic.fill")
-                            .font(.system(size: 44, weight: .light))
-                            .foregroundStyle(.white)
-                            .shadow(color: .white.opacity(0.5), radius: 10)
-                            .symbolEffect(.variableColor.iterative, isActive: manager.isRecording)
-                    }
-                }
-        }
+        .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
-                    if !manager.isRecording && !manager.isProcessing {
+                    if !isPressed && !manager.isRecording && !manager.isProcessing {
+                        isPressed = true
                         startRecording()
                     }
                 }
                 .onEnded { _ in
-                    if manager.isRecording {
+                    if isPressed && manager.isRecording {
+                        isPressed = false
                         stopRecording()
                     }
                 }
@@ -373,24 +152,26 @@ struct RecordView: View {
     private var instructionView: some View {
         Group {
             if manager.isProcessing {
-                HStack(spacing: 12) {
-                    Text("Analyzing voice patterns")
-                        .foregroundStyle(primaryGlow)
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Analyzing")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 14, weight: .medium))
             } else if !manager.hasMicrophonePermission || !manager.hasSpeechPermission {
                 VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.title2)
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.title3)
                         .foregroundStyle(.orange)
-                    Text("Enable microphone and speech recognition")
-                        .font(.caption)
+                    Text("Enable microphone & speech in Settings")
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text("Press and hold to record")
+                Text("Hold to speak")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -398,79 +179,81 @@ struct RecordView: View {
     // MARK: - Today's Count
 
     private var todayCountView: some View {
-        HStack(spacing: 16) {
-            // Count display
-            VStack(spacing: 2) {
-                Text("\(manager.todaysNoteCount)")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [primaryGlow, .white],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                Text("notes today")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
-            }
+        HStack(spacing: 4) {
+            Text("\(manager.todaysNoteCount)")
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .foregroundStyle(accentColor)
+            Text("today")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(
-                            LinearGradient(
-                                colors: [primaryGlow.opacity(0.3), Color.white.opacity(0.1)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
-        )
     }
 
-    // MARK: - Actions
+    // MARK: - Animations
+
+    private func startIdleAnimation() {
+        // Subtle breathing animation for idle state
+        withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+            idleAnimation = true
+            for i in 0..<9 {
+                blockScales[i] = 0.95
+            }
+        }
+    }
 
     private func startRecording() {
-        withAnimation(.spring(response: 0.3)) {
-            buttonScale = 0.92
+        // Blocks move outward and pulse
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+            let offsets: [CGSize] = [
+                CGSize(width: -8, height: -8),  // top-left
+                CGSize(width: 0, height: -10),  // top-center
+                CGSize(width: 8, height: -8),   // top-right
+                CGSize(width: -10, height: 0),  // middle-left
+                CGSize(width: 0, height: 0),    // center
+                CGSize(width: 10, height: 0),   // middle-right
+                CGSize(width: -8, height: 8),   // bottom-left
+                CGSize(width: 0, height: 10),   // bottom-center
+                CGSize(width: 8, height: 8)     // bottom-right
+            ]
+            blockOffsets = offsets
+
+            for i in 0..<9 {
+                blockScales[i] = 1.1
+            }
         }
-        pulseAnimation = true
+
+        // Start pulsing animation
+        startPulsingAnimation()
+
         manager.startRecording()
     }
 
-    private func stopRecording() {
-        withAnimation(.spring(response: 0.3)) {
-            buttonScale = 1.0
+    private func startPulsingAnimation() {
+        guard manager.isRecording else { return }
+
+        withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+            for i in 0..<9 {
+                blockScales[i] = i == 4 ? 1.2 : 1.05 // Center block pulses more
+            }
         }
-        pulseAnimation = false
-        manager.stopRecording()
     }
 
-    private func startAnimations() {
-        // Continuous ring rotation
-        withAnimation(.linear(duration: 20).repeatForever(autoreverses: false)) {
-            rotationAngle = 360
+    private func stopRecording() {
+        // Blocks return to original position
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            blockOffsets = Array(repeating: .zero, count: 9)
+            for i in 0..<9 {
+                blockScales[i] = 1.0
+            }
         }
 
-        // Inner ring rotation (opposite direction)
-        withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
-            innerRingRotation = -360
-        }
+        manager.stopRecording()
 
-        // Glow pulsing
-        withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-            glowIntensity = 1.2
-        }
-
-        // Particle floating
-        withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
-            particleOffset = .pi * 2
+        // Restart idle animation after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if !manager.isRecording {
+                startIdleAnimation()
+            }
         }
     }
 

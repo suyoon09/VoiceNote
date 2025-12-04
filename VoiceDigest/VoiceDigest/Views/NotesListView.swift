@@ -3,9 +3,6 @@ import SwiftUI
 struct NotesListView: View {
     @Environment(VoiceNoteManager.self) private var manager
 
-    @State private var showingGeneratedDigest = false
-    @State private var generatedDigest: DailyDigest?
-
     var body: some View {
         NavigationStack {
             Group {
@@ -16,22 +13,6 @@ struct NotesListView: View {
                 }
             }
             .navigationTitle("Notes")
-            .toolbar {
-                if !manager.todaysNotes.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            generateReport()
-                        } label: {
-                            Label("Generate Report", systemImage: "doc.text.magnifyingglass")
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $showingGeneratedDigest) {
-                if let digest = generatedDigest {
-                    DigestDetailView(digest: digest)
-                }
-            }
         }
     }
 
@@ -54,38 +35,6 @@ struct NotesListView: View {
 
     private var notesList: some View {
         List {
-            // Generate Report button section
-            if !manager.todaysNotes.isEmpty {
-                Section {
-                    Button {
-                        generateReport()
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.text.magnifyingglass")
-                                .font(.title2)
-                                .foregroundStyle(.blue)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Generate Report Now")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Text("\(manager.todaysNotes.count) notes from today")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
             // Notes by date
             ForEach(groupedNotes, id: \.key) { group in
                 Section {
@@ -134,13 +83,6 @@ struct NotesListView: View {
             if rhs.key == "Yesterday" { return false }
             return lhs.key > rhs.key
         }
-    }
-
-    // MARK: - Actions
-
-    private func generateReport() {
-        generatedDigest = manager.generateReportNow()
-        showingGeneratedDigest = true
     }
 }
 

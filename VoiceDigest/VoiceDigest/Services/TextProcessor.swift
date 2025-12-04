@@ -13,6 +13,50 @@ final class TextProcessor {
         "just", "really", "very", "pretty much"
     ]
 
+    // MARK: - Removable Phrases for Abridging
+
+    private static let removablePhrases: [String] = [
+        "i need to", "i have to", "i should", "i must", "i want to",
+        "i'm going to", "i will", "i'll", "gonna", "going to",
+        "need to", "have to", "should", "must", "want to",
+        "remember to", "don't forget to", "make sure to",
+        "i think", "i believe", "i feel like",
+        "it would be good to", "it might be good to",
+        "probably should", "maybe i should",
+        "for some", "do some", "get some", "buy some",
+        "about the", "regarding the", "concerning the",
+        "in order to", "so that i can", "so i can"
+    ]
+
+    // MARK: - Action Words Mapping
+
+    private static let actionMappings: [String: String] = [
+        "groceries": "Groceries",
+        "grocery": "Groceries",
+        "shopping": "Shopping",
+        "buy": "Buy",
+        "pick up": "Pick up",
+        "call": "Call",
+        "email": "Email",
+        "text": "Text",
+        "message": "Message",
+        "meet": "Meet",
+        "meeting": "Meeting",
+        "schedule": "Schedule",
+        "book": "Book",
+        "finish": "Finish",
+        "complete": "Complete",
+        "send": "Send",
+        "check": "Check",
+        "review": "Review",
+        "prepare": "Prepare",
+        "fix": "Fix",
+        "clean": "Clean",
+        "organize": "Organize",
+        "pay": "Pay",
+        "return": "Return"
+    ]
+
     // MARK: - Category Keywords
 
     private static let categoryKeywords: [NoteCategory: Set<String>] = [
@@ -60,7 +104,6 @@ final class TextProcessor {
         // Remove filler words (longer phrases first)
         let sortedFillers = Self.fillerWords.sorted { $0.count > $1.count }
         for filler in sortedFillers {
-            // Match filler words with word boundaries
             let pattern = "\\b\(NSRegularExpression.escapedPattern(for: filler))\\b"
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 cleaned = regex.stringByReplacingMatches(
@@ -77,34 +120,104 @@ final class TextProcessor {
             cleaned = cleaned.replacingOccurrences(of: "  ", with: " ")
         }
 
-        // Trim whitespace
         cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Capitalize first letter
         if !cleaned.isEmpty {
             cleaned = cleaned.prefix(1).uppercased() + cleaned.dropFirst()
         }
 
-        // Ensure proper ending punctuation
         if !cleaned.isEmpty && !cleaned.hasSuffix(".") && !cleaned.hasSuffix("!") && !cleaned.hasSuffix("?") {
             cleaned += "."
         }
 
-        // Fix common patterns
         cleaned = fixCapitalization(cleaned)
         cleaned = fixPunctuation(cleaned)
 
         return cleaned
     }
 
+    // MARK: - Abridge Content
+
+    func abridgeContent(_ text: String) -> String {
+        var abridged = text.lowercased()
+
+        // Remove ending punctuation for processing
+        abridged = abridged.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
+
+        // Remove common verbose phrases (longer phrases first)
+        let sortedPhrases = Self.removablePhrases.sorted { $0.count > $1.count }
+        for phrase in sortedPhrases {
+            abridged = abridged.replacingOccurrences(of: phrase, with: "")
+        }
+
+        // Clean up spaces
+        while abridged.contains("  ") {
+            abridged = abridged.replacingOccurrences(of: "  ", with: " ")
+        }
+        abridged = abridged.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try to identify action and extract key items
+        var action: String?
+        var items: [String] = []
+
+        // Check for action words
+        for (keyword, actionName) in Self.actionMappings {
+            if abridged.contains(keyword) {
+                action = actionName
+                // Remove the action word from the remaining text
+                abridged = abridged.replacingOccurrences(of: keyword, with: "")
+                break
+            }
+        }
+
+        // Clean up again after removing action
+        abridged = abridged.trimmingCharacters(in: .whitespacesAndNewlines)
+        while abridged.hasPrefix(",") || abridged.hasPrefix("-") {
+            abridged = String(abridged.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Extract items from remaining text (split by commas, "and", etc.)
+        let itemPatterns = abridged
+            .replacingOccurrences(of: " and ", with: ", ")
+            .replacingOccurrences(of: " & ", with: ", ")
+            .components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0.count > 1 }
+
+        if !itemPatterns.isEmpty {
+            items = itemPatterns
+        }
+
+        // Build abridged output
+        if let action = action {
+            if items.isEmpty {
+                // Just capitalize and return
+                return action.prefix(1).uppercased() + action.dropFirst() + (abridged.isEmpty ? "" : " - \(abridged)")
+            } else {
+                return "\(action) - \(items.joined(separator: ", "))"
+            }
+        } else if !items.isEmpty {
+            // No clear action, just list items
+            let firstItem = items[0]
+            let capitalizedFirst = firstItem.prefix(1).uppercased() + firstItem.dropFirst()
+            if items.count > 1 {
+                return "\(capitalizedFirst), \(items.dropFirst().joined(separator: ", "))"
+            }
+            return capitalizedFirst
+        } else {
+            // Fallback: just capitalize first letter
+            if abridged.isEmpty {
+                return text // Return original if we couldn't abridge
+            }
+            return abridged.prefix(1).uppercased() + abridged.dropFirst()
+        }
+    }
+
     private func fixCapitalization(_ text: String) -> String {
         var result = text
-
-        // Capitalize "I"
         result = result.replacingOccurrences(of: " i ", with: " I ")
         result = result.replacingOccurrences(of: " i'", with: " I'")
 
-        // Capitalize after periods
         let sentences = result.components(separatedBy: ". ")
         result = sentences.map { sentence in
             guard !sentence.isEmpty else { return sentence }
@@ -117,7 +230,6 @@ final class TextProcessor {
     private func fixPunctuation(_ text: String) -> String {
         var result = text
 
-        // Fix comma-separated lists
         let listPattern = "\\b(\\w+)\\s+and\\s+(\\w+)\\s+and\\s+(\\w+)\\b"
         if let regex = try? NSRegularExpression(pattern: listPattern, options: .caseInsensitive) {
             let range = NSRange(result.startIndex..., in: result)
@@ -129,7 +241,6 @@ final class TextProcessor {
             )
         }
 
-        // Fix double punctuation
         result = result.replacingOccurrences(of: "..", with: ".")
         result = result.replacingOccurrences(of: ",,", with: ",")
         result = result.replacingOccurrences(of: " ,", with: ",")
@@ -148,14 +259,12 @@ final class TextProcessor {
             var score = 0
             for keyword in keywords {
                 if lowercasedText.contains(keyword) {
-                    // Multi-word keywords get higher score
                     score += keyword.contains(" ") ? 3 : 1
                 }
             }
             categoryScores[category] = score
         }
 
-        // Return category with highest score, or uncategorized if no matches
         if let (category, score) = categoryScores.max(by: { $0.value < $1.value }), score > 0 {
             return category
         }
@@ -168,24 +277,17 @@ final class TextProcessor {
     func extractKeywords(from text: String, maxKeywords: Int = 10) -> [String] {
         var keywords: Set<String> = []
 
-        // Use NLTagger for lexical analysis
         let tagger = NLTagger(tagSchemes: [.lexicalClass, .nameType])
         tagger.string = text
 
         let options: NLTagger.Options = [.omitPunctuation, .omitWhitespace, .joinNames]
 
-        // Extract nouns and proper nouns
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .lexicalClass, options: options) { tag, tokenRange in
             if let tag = tag {
                 let word = String(text[tokenRange]).lowercased()
-
-                // Only include words with 4+ characters
                 guard word.count >= 4 else { return true }
-
-                // Skip common words and filler words
                 guard !isCommonWord(word) && !Self.fillerWords.contains(word) else { return true }
 
-                // Include nouns and verbs
                 if tag == .noun || tag == .verb || tag == .adjective {
                     keywords.insert(word.capitalized)
                 }
@@ -193,7 +295,6 @@ final class TextProcessor {
             return true
         }
 
-        // Extract named entities (people, places, organizations)
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .nameType, options: options) { tag, tokenRange in
             if let tag = tag {
                 let word = String(text[tokenRange])
@@ -204,7 +305,6 @@ final class TextProcessor {
             return true
         }
 
-        // Sort by length (longer keywords tend to be more specific) and limit
         let sortedKeywords = keywords.sorted { $0.count > $1.count }
         return Array(sortedKeywords.prefix(maxKeywords))
     }
@@ -234,14 +334,11 @@ final class TextProcessor {
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Check if empty
         guard !cleaned.isEmpty else { return false }
 
-        // Check minimum word count
         let words = cleaned.components(separatedBy: .whitespaces)
             .filter { !$0.isEmpty && !Self.fillerWords.contains($0) }
 
-        // Require at least 2 meaningful words
         return words.count >= 2
     }
 
@@ -253,11 +350,8 @@ final class TextProcessor {
         }
 
         var sections: [String] = []
-
-        // Group by category
         let notesByCategory = Dictionary(grouping: notes, by: { $0.category })
 
-        // Build fluid summary for each category
         for category in NoteCategory.allCases {
             if let categoryNotes = notesByCategory[category], !categoryNotes.isEmpty {
                 let categorySection = buildCategorySummary(category: category, notes: categoryNotes)
@@ -265,7 +359,6 @@ final class TextProcessor {
             }
         }
 
-        // Add top keywords
         let allKeywords = notes.flatMap { $0.keywords }
         let keywordCounts = Dictionary(grouping: allKeywords, by: { $0 })
             .mapValues { $0.count }
@@ -273,48 +366,27 @@ final class TextProcessor {
         let topKeywords = Array(keywordCounts.prefix(5).map { $0.key })
 
         if !topKeywords.isEmpty {
-            sections.append("🔑 Key themes: \(topKeywords.joined(separator: ", "))")
+            sections.append("🔑 \(topKeywords.joined(separator: ", "))")
         }
 
-        // Add statistics
         let noteWord = notes.count == 1 ? "note" : "notes"
-        sections.append("📊 You recorded \(notes.count) \(noteWord) today")
+        sections.append("📊 \(notes.count) \(noteWord) recorded")
 
         return sections.joined(separator: "\n\n")
     }
 
     private func buildCategorySummary(category: NoteCategory, notes: [VoiceNote]) -> String {
         let header = "\(category.emoji) \(category.rawValue)"
-
-        if notes.count == 1 {
-            let note = notes[0]
-            let timeStr = formatTime(note.createdAt)
-            return "\(header)\nAt \(timeStr), you noted: \(note.cleanedContent)"
-        }
-
-        // Multiple notes - create a fluid summary
         var lines: [String] = [header]
 
-        // Group by time periods for natural flow
         let sortedNotes = notes.sorted { $0.createdAt < $1.createdAt }
 
-        for (index, note) in sortedNotes.enumerated() {
-            let timeStr = formatTime(note.createdAt)
-            let connector = getConnector(for: index, total: sortedNotes.count)
-            lines.append("\(connector)\(timeStr): \(note.cleanedContent)")
+        for note in sortedNotes {
+            let abridged = abridgeContent(note.cleanedContent)
+            lines.append("• \(abridged)")
         }
 
         return lines.joined(separator: "\n")
-    }
-
-    private func getConnector(for index: Int, total: Int) -> String {
-        if index == 0 {
-            return "• "
-        } else if index == total - 1 {
-            return "• "
-        } else {
-            return "• "
-        }
     }
 
     private func formatTime(_ date: Date) -> String {
