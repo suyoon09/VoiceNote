@@ -54,6 +54,7 @@ struct VoiceNote: Identifiable, Codable, Equatable {
     var category: NoteCategory
     var isProcessed: Bool
     var duration: TimeInterval
+    var actionableDate: Date?
 
     init(
         id: UUID = UUID(),
@@ -64,7 +65,8 @@ struct VoiceNote: Identifiable, Codable, Equatable {
         keywords: [String] = [],
         category: NoteCategory = .uncategorized,
         isProcessed: Bool = false,
-        duration: TimeInterval = 0
+        duration: TimeInterval = 0,
+        actionableDate: Date? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -75,6 +77,19 @@ struct VoiceNote: Identifiable, Codable, Equatable {
         self.category = category
         self.isProcessed = isProcessed
         self.duration = duration
+        self.actionableDate = actionableDate
+    }
+
+    var hasActionableDate: Bool {
+        actionableDate != nil
+    }
+
+    var formattedActionableDate: String? {
+        guard let date = actionableDate else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     var formattedTime: String {

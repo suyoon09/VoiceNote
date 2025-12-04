@@ -39,16 +39,20 @@ struct NotesListView: View {
             ForEach(groupedNotes, id: \.key) { group in
                 Section {
                     ForEach(group.value) { note in
-                        NoteCardView(note: note)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    withAnimation {
-                                        manager.deleteNote(note)
-                                    }
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                        NoteCardView(note: note) {
+                            withAnimation {
+                                manager.deleteNote(note)
                             }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                withAnimation {
+                                    manager.deleteNote(note)
+                                }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 } header: {
                     Text(group.key)
@@ -89,7 +93,9 @@ struct NotesListView: View {
 // MARK: - Note Card View
 
 struct NoteCardView: View {
+    @Environment(VoiceNoteManager.self) private var manager
     let note: VoiceNote
+    var onDelete: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -107,6 +113,23 @@ struct NoteCardView: View {
                 .background(categoryColor.opacity(0.15))
                 .foregroundStyle(categoryColor)
                 .clipShape(Capsule())
+
+                // Calendar indicator for notes with actionable dates
+                if note.hasActionableDate {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.caption)
+                        if let formattedDate = note.formattedActionableDate {
+                            Text(formattedDate)
+                                .font(.caption2)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.purple.opacity(0.15))
+                    .foregroundStyle(.purple)
+                    .clipShape(Capsule())
+                }
 
                 Spacer()
 
@@ -139,6 +162,34 @@ struct NoteCardView: View {
             }
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            // Share option
+            ShareLink(item: note.cleanedContent) {
+                Label("Share Text", systemImage: "square.and.arrow.up")
+            }
+
+            Divider()
+
+            // Add to Calendar option
+            Button {
+                manager.addToCalendar(note: note)
+            } label: {
+                if note.hasActionableDate {
+                    Label("Add to Calendar (\(note.formattedActionableDate ?? ""))", systemImage: "calendar.badge.plus")
+                } else {
+                    Label("Add to Calendar", systemImage: "calendar.badge.plus")
+                }
+            }
+
+            Divider()
+
+            // Delete option
+            Button(role: .destructive) {
+                onDelete?()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     private var categoryColor: Color {

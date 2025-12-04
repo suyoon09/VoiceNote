@@ -22,6 +22,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Voice Digest can add your voice notes with detected dates to your calendar as reminders.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Voice Digest can add your voice notes with detected dates to your calendar as reminders.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice Digest needs microphone access to record your voice notes.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

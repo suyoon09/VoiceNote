@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UserNotifications
+import EventKit
 
 enum RecordingState {
     case idle
@@ -15,6 +16,8 @@ enum ToastMessage: Equatable {
     case noteSaved
     case noteDeleted
     case digestGenerated
+    case addedToCalendar
+    case calendarPermissionDenied
     case error(String)
 
     var message: String {
@@ -29,6 +32,10 @@ enum ToastMessage: Equatable {
             return "Note deleted"
         case .digestGenerated:
             return "Digest generated"
+        case .addedToCalendar:
+            return "Added to calendar"
+        case .calendarPermissionDenied:
+            return "Calendar access denied"
         case .error(let message):
             return message
         }
@@ -36,9 +43,9 @@ enum ToastMessage: Equatable {
 
     var icon: String {
         switch self {
-        case .recordingTooShort, .noSpeechDetected, .error:
+        case .recordingTooShort, .noSpeechDetected, .error, .calendarPermissionDenied:
             return "exclamationmark.circle"
-        case .noteSaved, .digestGenerated:
+        case .noteSaved, .digestGenerated, .addedToCalendar:
             return "checkmark.circle"
         case .noteDeleted:
             return "trash"
@@ -47,7 +54,7 @@ enum ToastMessage: Equatable {
 
     var isError: Bool {
         switch self {
-        case .recordingTooShort, .noSpeechDetected, .error:
+        case .recordingTooShort, .noSpeechDetected, .error, .calendarPermissionDenied:
             return true
         default:
             return false
@@ -62,6 +69,7 @@ final class VoiceNoteManager {
     let audioRecorder = AudioRecorder()
     let speechRecognizer = SpeechRecognizer()
     let textProcessor = TextProcessor()
+    let eventStore = EKEventStore()
 
     // MARK: - State
 
@@ -69,6 +77,7 @@ final class VoiceNoteManager {
     var voiceNotes: [VoiceNote] = []
     var dailyDigests: [DailyDigest] = []
     var statistics: AppStatistics = AppStatistics()
+    var hasCalendarPermission = false
 
     var toastMessage: ToastMessage?
     var showToast = false
@@ -85,9 +94,9 @@ final class VoiceNoteManager {
     // MARK: - Constants
 
     private let minimumRecordingDuration: TimeInterval = 2.0
-    private let notesKey = "voiceNotes"
-    private let digestsKey = "dailyDigests"
-    private let statisticsKey = "appStatistics"
+    private let notesFileName = "voiceNotes.json"
+    private let digestsFileName = "dailyDigests.json"
+    private let statisticsFileName = "appStatistics.json"
     private let digestTimeKey = "digestNotificationTime"
 
     // MARK: - Computed Properties
@@ -139,6 +148,7 @@ final class VoiceNoteManager {
         _ = await audioRecorder.requestPermission()
         _ = await speechRecognizer.requestPermission()
         await requestNotificationPermission()
+        await requestCalendarPermission()
     }
 
     var hasMicrophonePermission: Bool {
@@ -147,6 +157,30 @@ final class VoiceNoteManager {
 
     var hasSpeechPermission: Bool {
         speechRecognizer.hasPermission
+    }
+
+    func requestCalendarPermission() async {
+        if #available(iOS 17.0, *) {
+            do {
+                let granted = try await eventStore.requestFullAccessToEvents()
+                await MainActor.run {
+                    hasCalendarPermission = granted
+                }
+            } catch {
+                await MainActor.run {
+                    hasCalendarPermission = false
+                }
+            }
+        } else {
+            let granted = await withCheckedContinuation { continuation in
+                eventStore.requestAccess(to: .event) { granted, _ in
+                    continuation.resume(returning: granted)
+                }
+            }
+            await MainActor.run {
+                hasCalendarPermission = granted
+            }
+        }
     }
 
     // MARK: - Recording
@@ -229,6 +263,7 @@ final class VoiceNoteManager {
             let cleanedContent = textProcessor.cleanTranscript(rawTranscript)
             let keywords = textProcessor.extractKeywords(from: rawTranscript)
             let category = textProcessor.categorize(rawTranscript)
+            let actionableDate = textProcessor.extractActionableDate(from: rawTranscript)
 
             // Create note
             let note = VoiceNote(
@@ -238,7 +273,8 @@ final class VoiceNoteManager {
                 keywords: keywords,
                 category: category,
                 isProcessed: true,
-                duration: duration
+                duration: duration,
+                actionableDate: actionableDate
             )
 
             await MainActor.run {
@@ -285,6 +321,66 @@ final class VoiceNoteManager {
         voiceNotes.remove(atOffsets: offsets)
         saveNotes()
         showToast(message: .noteDeleted)
+    }
+
+    // MARK: - Calendar Integration
+
+    func addToCalendar(note: VoiceNote) {
+        guard hasCalendarPermission else {
+            showToast(message: .calendarPermissionDenied)
+            return
+        }
+
+        let event = EKEvent(eventStore: eventStore)
+        event.title = textProcessor.abridgeContent(note.cleanedContent)
+
+        // Use actionable date if available, otherwise use 1 hour from now
+        if let actionableDate = note.actionableDate {
+            event.startDate = actionableDate
+            event.endDate = actionableDate.addingTimeInterval(3600) // 1 hour duration
+        } else {
+            let startDate = Date().addingTimeInterval(3600)
+            event.startDate = startDate
+            event.endDate = startDate.addingTimeInterval(3600)
+        }
+
+        event.notes = note.cleanedContent
+        event.calendar = eventStore.defaultCalendarForNewEvents
+
+        // Add a reminder 15 minutes before
+        let alarm = EKAlarm(relativeOffset: -900)
+        event.addAlarm(alarm)
+
+        do {
+            try eventStore.save(event, span: .thisEvent)
+            showToast(message: .addedToCalendar)
+        } catch {
+            showToast(message: .error("Failed to add to calendar"))
+        }
+    }
+
+    func addToCalendarWithDate(note: VoiceNote, date: Date) {
+        guard hasCalendarPermission else {
+            showToast(message: .calendarPermissionDenied)
+            return
+        }
+
+        let event = EKEvent(eventStore: eventStore)
+        event.title = textProcessor.abridgeContent(note.cleanedContent)
+        event.startDate = date
+        event.endDate = date.addingTimeInterval(3600)
+        event.notes = note.cleanedContent
+        event.calendar = eventStore.defaultCalendarForNewEvents
+
+        let alarm = EKAlarm(relativeOffset: -900)
+        event.addAlarm(alarm)
+
+        do {
+            try eventStore.save(event, span: .thisEvent)
+            showToast(message: .addedToCalendar)
+        } catch {
+            showToast(message: .error("Failed to add to calendar"))
+        }
     }
 
     // MARK: - Digest Generation
@@ -373,7 +469,15 @@ final class VoiceNoteManager {
         }
     }
 
-    // MARK: - Persistence
+    // MARK: - Persistence (FileManager with Atomic Writes)
+
+    private var documentsDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    private func fileURL(for fileName: String) -> URL {
+        documentsDirectory.appendingPathComponent(fileName)
+    }
 
     private func loadData() {
         loadNotes()
@@ -382,45 +486,76 @@ final class VoiceNoteManager {
     }
 
     private func loadNotes() {
-        if let data = UserDefaults.standard.data(forKey: notesKey),
-           let decoded = try? JSONDecoder().decode([VoiceNote].self, from: data) {
+        let url = fileURL(for: notesFileName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let decoded = try JSONDecoder().decode([VoiceNote].self, from: data)
             voiceNotes = decoded
+        } catch {
+            print("Failed to load notes: \(error)")
         }
     }
 
     private func saveNotes() {
-        if let encoded = try? JSONEncoder().encode(voiceNotes) {
-            UserDefaults.standard.set(encoded, forKey: notesKey)
+        let url = fileURL(for: notesFileName)
+        do {
+            let data = try JSONEncoder().encode(voiceNotes)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            print("Failed to save notes: \(error)")
         }
     }
 
     private func loadDigests() {
-        if let data = UserDefaults.standard.data(forKey: digestsKey),
-           let decoded = try? JSONDecoder().decode([DailyDigest].self, from: data) {
+        let url = fileURL(for: digestsFileName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let decoded = try JSONDecoder().decode([DailyDigest].self, from: data)
             dailyDigests = decoded
+        } catch {
+            print("Failed to load digests: \(error)")
         }
     }
 
     private func saveDigests() {
-        if let encoded = try? JSONEncoder().encode(dailyDigests) {
-            UserDefaults.standard.set(encoded, forKey: digestsKey)
+        let url = fileURL(for: digestsFileName)
+        do {
+            let data = try JSONEncoder().encode(dailyDigests)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            print("Failed to save digests: \(error)")
         }
     }
 
     private func loadStatistics() {
-        if let data = UserDefaults.standard.data(forKey: statisticsKey),
-           let decoded = try? JSONDecoder().decode(AppStatistics.self, from: data) {
+        let url = fileURL(for: statisticsFileName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let decoded = try JSONDecoder().decode(AppStatistics.self, from: data)
             statistics = decoded
+        } catch {
+            print("Failed to load statistics: \(error)")
         }
     }
 
     private func saveStatistics() {
-        if let encoded = try? JSONEncoder().encode(statistics) {
-            UserDefaults.standard.set(encoded, forKey: statisticsKey)
+        let url = fileURL(for: statisticsFileName)
+        do {
+            let data = try JSONEncoder().encode(statistics)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            print("Failed to save statistics: \(error)")
         }
     }
 
     private func loadSettings() {
+        // Keep digest notification time in UserDefaults (small, simple preference)
         if let data = UserDefaults.standard.data(forKey: digestTimeKey),
            let decoded = try? JSONDecoder().decode(Date.self, from: data) {
             digestNotificationTime = decoded

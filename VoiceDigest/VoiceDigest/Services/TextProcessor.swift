@@ -342,6 +342,65 @@ final class TextProcessor {
         return words.count >= 2
     }
 
+    // MARK: - Date Extraction
+
+    func extractActionableDate(from text: String) -> Date? {
+        let detector: NSDataDetector
+        do {
+            detector = try NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
+        } catch {
+            return nil
+        }
+
+        let range = NSRange(text.startIndex..., in: text)
+        var foundDate: Date?
+        var foundRange: NSRange?
+
+        detector.enumerateMatches(in: text, options: [], range: range) { result, _, stop in
+            guard let result = result, let date = result.date else { return }
+
+            // Only consider future dates or dates within the last hour
+            let now = Date()
+            let oneHourAgo = now.addingTimeInterval(-3600)
+
+            if date >= oneHourAgo {
+                // Check if this result includes time information
+                let hasTimeComponent = result.timeZone != nil ||
+                    text.lowercased().contains("at ") ||
+                    text.lowercased().contains("am") ||
+                    text.lowercased().contains("pm") ||
+                    text.lowercased().contains("o'clock")
+
+                // Prefer dates with time components
+                if foundDate == nil || hasTimeComponent {
+                    foundDate = date
+                    foundRange = result.range
+                    if hasTimeComponent {
+                        stop.pointee = true
+                    }
+                }
+            }
+        }
+
+        // If we found "tomorrow" without a specific time, set it to 9 AM
+        if let date = foundDate, let range = foundRange {
+            let matchedText = (text as NSString).substring(with: range).lowercased()
+            if matchedText.contains("tomorrow") || matchedText.contains("next") {
+                let calendar = Calendar.current
+                let components = calendar.dateComponents([.hour, .minute], from: date)
+                // If time is midnight (default), set to 9 AM
+                if components.hour == 0 && components.minute == 0 {
+                    var newComponents = calendar.dateComponents([.year, .month, .day], from: date)
+                    newComponents.hour = 9
+                    newComponents.minute = 0
+                    return calendar.date(from: newComponents)
+                }
+            }
+        }
+
+        return foundDate
+    }
+
     // MARK: - Digest Generation
 
     func generateDigestSummary(for notes: [VoiceNote]) -> String {
