@@ -267,21 +267,6 @@ struct RecordView: View {
     }
 }
 
-// MARK: - Recording State Extension
-
-extension RecordingState: Equatable {
-    static func == (lhs: RecordingState, rhs: RecordingState) -> Bool {
-        switch (lhs, rhs) {
-        case (.idle, .idle), (.recording, .recording), (.processing, .processing):
-            return true
-        case (.error(let lhsMsg), .error(let rhsMsg)):
-            return lhsMsg == rhsMsg
-        default:
-            return false
-        }
-    }
-}
-
 #Preview {
     RecordView()
         .environment(VoiceNoteManager())
