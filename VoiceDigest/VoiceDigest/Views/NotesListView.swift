@@ -2,65 +2,105 @@ import SwiftUI
 
 struct NotesListView: View {
     @Environment(VoiceNoteManager.self) private var manager
+    @State private var scrollOffset: CGFloat = 0
 
     var body: some View {
         NavigationStack {
-            Group {
-                if manager.voiceNotes.isEmpty {
-                    emptyStateView
-                } else {
-                    notesList
+            ZStack {
+                // Premium background
+                AppColors.background
+                    .ignoresSafeArea()
+
+                Group {
+                    if manager.voiceNotes.isEmpty {
+                        emptyStateView
+                    } else {
+                        notesScrollView
+                    }
                 }
             }
             .navigationTitle("Notes")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(AppColors.background, for: .navigationBar)
         }
     }
 
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        ContentUnavailableView {
-            Label("No Notes Yet", systemImage: "mic.badge.plus")
-        } description: {
-            Text("Record your first voice note by pressing and holding the record button.")
-        } actions: {
-            Button("Go to Record") {
-                // This would need to switch tabs - handled at parent level
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(AppColors.accent.opacity(0.1))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: "mic.badge.plus")
+                    .font(.system(size: 40))
+                    .foregroundStyle(AppColors.accent)
             }
-            .buttonStyle(.borderedProminent)
+
+            VStack(spacing: 8) {
+                Text("No Notes Yet")
+                    .font(AppTypography.sectionHeader)
+                    .foregroundStyle(AppColors.primaryText)
+
+                Text("Record your first voice note by\npressing and holding the record button.")
+                    .font(AppTypography.body)
+                    .foregroundStyle(AppColors.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Notes Scroll View
+
+    private var notesScrollView: some View {
+        ScrollView {
+            LazyVStack(spacing: 24, pinnedViews: [.sectionHeaders]) {
+                ForEach(groupedNotes, id: \.key) { group in
+                    Section {
+                        VStack(spacing: 12) {
+                            ForEach(group.value) { note in
+                                PremiumNoteCard(note: note) {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        manager.deleteNote(note)
+                                    }
+                                }
+                            }
+                        }
+                    } header: {
+                        sectionHeader(title: group.key, count: group.value.count)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 100)
         }
     }
 
-    // MARK: - Notes List
+    // MARK: - Section Header
 
-    private var notesList: some View {
-        List {
-            // Notes by date
-            ForEach(groupedNotes, id: \.key) { group in
-                Section {
-                    ForEach(group.value) { note in
-                        NoteCardView(note: note) {
-                            withAnimation {
-                                manager.deleteNote(note)
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                withAnimation {
-                                    manager.deleteNote(note)
-                                }
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                } header: {
-                    Text(group.key)
-                        .font(.headline)
-                }
-            }
+    private func sectionHeader(title: String, count: Int) -> some View {
+        HStack {
+            Text(title)
+                .font(AppTypography.caption)
+                .foregroundStyle(AppColors.primaryText)
+
+            Text("\(count)")
+                .font(AppTypography.captionSmall)
+                .foregroundStyle(AppColors.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(AppColors.accent.opacity(0.1))
+                .clipShape(Capsule())
+
+            Spacer()
         }
-        .listStyle(.insetGrouped)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .background(AppColors.background)
     }
 
     // MARK: - Grouped Notes
@@ -79,7 +119,6 @@ struct NotesListView: View {
             }
         }
 
-        // Sort groups with Today first, then Yesterday, then by date descending
         return grouped.sorted { lhs, rhs in
             if lhs.key == "Today" { return true }
             if rhs.key == "Today" { return false }
@@ -90,78 +129,71 @@ struct NotesListView: View {
     }
 }
 
-// MARK: - Note Card View
+// MARK: - Premium Note Card
 
-struct NoteCardView: View {
+struct PremiumNoteCard: View {
     @Environment(VoiceNoteManager.self) private var manager
     let note: VoiceNote
     var onDelete: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Category and time row
-            HStack {
-                // Category badge
-                HStack(spacing: 4) {
-                    Text(note.category.emoji)
-                    Text(note.category.rawValue)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(categoryColor.opacity(0.15))
-                .foregroundStyle(categoryColor)
-                .clipShape(Capsule())
+        VStack(alignment: .leading, spacing: 12) {
+            // Top row: Time pill and calendar indicator
+            HStack(spacing: 8) {
+                // Time pill (Electric Indigo)
+                Text(note.formattedTime)
+                    .accentPill(color: AppColors.accent)
 
-                // Calendar indicator for notes with actionable dates
+                // Calendar indicator
                 if note.hasActionableDate {
                     HStack(spacing: 4) {
                         Image(systemName: "calendar.badge.clock")
-                            .font(.caption)
+                            .font(.system(size: 10))
                         if let formattedDate = note.formattedActionableDate {
                             Text(formattedDate)
-                                .font(.caption2)
+                                .font(AppTypography.captionSmall)
                         }
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.purple.opacity(0.15))
-                    .foregroundStyle(.purple)
+                    .padding(.vertical, 5)
+                    .background(AppColors.accentSecondary.opacity(0.1))
+                    .foregroundStyle(AppColors.accentSecondary)
                     .clipShape(Capsule())
                 }
 
                 Spacer()
 
-                // Time
-                Text(note.formattedTime)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Subtle category tag
+                Text(note.category.rawValue)
+                    .subtleTag(color: note.category.sophisticatedColor)
             }
 
             // Content
             Text(note.cleanedContent)
-                .font(.body)
+                .font(AppTypography.body)
+                .foregroundStyle(AppColors.primaryText)
                 .lineLimit(3)
+                .lineSpacing(2)
 
-            // Keywords
+            // Keywords (horizontal scroll pills)
             if !note.keywords.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(note.keywords.prefix(5), id: \.self) { keyword in
                             Text(keyword)
-                                .font(.caption2)
+                                .font(AppTypography.captionSmall)
+                                .foregroundStyle(AppColors.tertiaryText)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color(.systemGray5))
-                                .foregroundStyle(.secondary)
+                                .background(AppColors.divider)
                                 .clipShape(Capsule())
                         }
                     }
                 }
             }
         }
-        .padding(.vertical, 4)
+        .sophisticatedCard()
+        .contentShape(Rectangle())
         .contextMenu {
             // Share option
             ShareLink(item: note.cleanedContent) {
@@ -170,7 +202,7 @@ struct NoteCardView: View {
 
             Divider()
 
-            // Add to Calendar option
+            // Add to Calendar
             Button {
                 manager.addToCalendar(note: note)
             } label: {
@@ -183,27 +215,12 @@ struct NoteCardView: View {
 
             Divider()
 
-            // Delete option
+            // Delete
             Button(role: .destructive) {
                 onDelete?()
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-        }
-    }
-
-    private var categoryColor: Color {
-        switch note.category {
-        case .work:
-            return .blue
-        case .personal:
-            return .green
-        case .ideas:
-            return .yellow
-        case .tasks:
-            return .orange
-        case .uncategorized:
-            return .gray
         }
     }
 }
@@ -217,95 +234,104 @@ struct DigestDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(digest.formattedDate)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Text("\(digest.noteCount) notes")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal)
+            ZStack {
+                AppColors.background
+                    .ignoresSafeArea()
 
-                    // Summary
-                    if !digest.summary.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Header
                         VStack(alignment: .leading, spacing: 8) {
-                            Label("Summary", systemImage: "text.alignleft")
-                                .font(.headline)
+                            Text(digest.formattedDate)
+                                .font(AppTypography.displaySerif)
+                                .foregroundStyle(AppColors.primaryText)
 
-                            Text(digest.summary)
-                                .font(.body)
-                                .foregroundStyle(.secondary)
+                            Text("\(digest.noteCount) notes recorded")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(AppColors.secondaryText)
                         }
                         .padding(.horizontal)
-                    }
+                        .padding(.top, 8)
 
-                    // Top keywords
-                    if !digest.topKeywords.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Top Keywords", systemImage: "key.fill")
-                                .font(.headline)
+                        // Summary in quote block style
+                        if !digest.summary.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("Summary", systemImage: "text.alignleft")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(AppColors.secondaryText)
 
-                            FlowLayout(spacing: 8) {
-                                ForEach(digest.topKeywords, id: \.self) { keyword in
-                                    Text(keyword)
-                                        .font(.caption)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.1))
-                                        .foregroundStyle(.blue)
-                                        .clipShape(Capsule())
-                                }
+                                Text(digest.summary)
+                                    .font(AppTypography.body)
+                                    .foregroundStyle(AppColors.primaryText)
+                                    .quoteBlock()
                             }
-                        }
-                        .padding(.horizontal)
-                    }
-
-                    Divider()
-                        .padding(.horizontal)
-
-                    // Notes by category
-                    ForEach(NoteCategory.allCases, id: \.self) { category in
-                        if let notes = digest.notesByCategory[category], !notes.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text(category.emoji)
-                                    Text(category.rawValue)
-                                        .fontWeight(.semibold)
-                                    Text("(\(notes.count))")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .font(.headline)
-
-                                ForEach(notes) { note in
-                                    HStack(alignment: .top, spacing: 12) {
-                                        Text(note.formattedTime)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 60, alignment: .leading)
-
-                                        Text(note.cleanedContent)
-                                            .font(.body)
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                            }
+                            .padding()
+                            .sophisticatedCard(padding: 0, cornerRadius: 16)
                             .padding(.horizontal)
+                        }
 
-                            if category != NoteCategory.allCases.last {
-                                Divider()
+                        // Top keywords as horizontal pills
+                        if !digest.topKeywords.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Top Keywords")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(AppColors.secondaryText)
+                                    .padding(.horizontal)
+
+                                KeywordPillsView(keywords: digest.topKeywords)
                                     .padding(.horizontal)
                             }
                         }
+
+                        // Notes by category
+                        ForEach(NoteCategory.allCases, id: \.self) { category in
+                            if let notes = digest.notesByCategory[category], !notes.isEmpty {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    HStack {
+                                        Text(category.emoji)
+                                        Text(category.rawValue)
+                                            .font(AppTypography.cardTitle)
+                                            .foregroundStyle(AppColors.primaryText)
+                                        Text("(\(notes.count))")
+                                            .font(AppTypography.caption)
+                                            .foregroundStyle(AppColors.tertiaryText)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ForEach(notes) { note in
+                                            HStack(alignment: .top, spacing: 12) {
+                                                ActionCheckmark(color: category.sophisticatedColor)
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(note.cleanedContent)
+                                                        .font(AppTypography.body)
+                                                        .foregroundStyle(AppColors.primaryText)
+
+                                                    Text(note.formattedTime)
+                                                        .font(AppTypography.captionSmall)
+                                                        .foregroundStyle(AppColors.tertiaryText)
+                                                }
+                                            }
+                                            .padding(.vertical, 4)
+                                        }
+                                    }
+                                }
+                                .padding()
+                                .sophisticatedCard(padding: 0, cornerRadius: 16)
+                                .padding(.horizontal)
+                            }
+                        }
+
+                        // Watermark footer
+                        WatermarkFooter()
+                            .padding(.horizontal)
                     }
+                    .padding(.vertical)
                 }
-                .padding(.vertical)
             }
             .navigationTitle("Daily Digest")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppColors.background, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if let onShare = onShare {
@@ -316,6 +342,7 @@ struct DigestDetailView: View {
                             }
                         } label: {
                             Image(systemName: "square.and.arrow.up")
+                                .foregroundStyle(AppColors.accent)
                         }
                     }
                 }
@@ -324,6 +351,7 @@ struct DigestDetailView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .foregroundStyle(AppColors.accent)
                 }
             }
         }

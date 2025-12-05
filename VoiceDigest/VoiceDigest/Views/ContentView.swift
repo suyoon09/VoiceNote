@@ -7,6 +7,10 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            // Global premium background
+            AppColors.background
+                .ignoresSafeArea()
+
             TabView(selection: $selectedTab) {
                 RecordView()
                     .tabItem {
@@ -33,13 +37,14 @@ struct ContentView: View {
                     }
                     .tag(3)
             }
+            .tint(AppColors.accent)
 
             // Toast overlay
             VStack {
                 Spacer()
 
                 if manager.showToast, let message = manager.toastMessage {
-                    ToastView(message: message)
+                    PremiumToastView(message: message)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .padding(.bottom, 100)
                 }
@@ -49,8 +54,39 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Toast View
+// MARK: - Premium Toast View
 
+struct PremiumToastView: View {
+    let message: ToastMessage
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon with accent circle background
+            ZStack {
+                Circle()
+                    .fill(message.isError ? Color.red.opacity(0.15) : AppColors.accentSecondary.opacity(0.15))
+                    .frame(width: 32, height: 32)
+
+                Image(systemName: message.icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(message.isError ? .red : AppColors.accentSecondary)
+            }
+
+            Text(message.message)
+                .font(AppTypography.caption)
+                .foregroundStyle(AppColors.primaryText)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(AppColors.cardBackground)
+                .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 4)
+        )
+    }
+}
+
+// Keep the old ToastView for backward compatibility if needed elsewhere
 struct ToastView: View {
     let message: ToastMessage
 

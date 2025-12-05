@@ -21,6 +21,7 @@
 		A1000017238F4A0100000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000018238F4A0100000001 /* SettingsView.swift */; };
 		A1000025238F4A0100000001 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000024238F4A0100000001 /* CalendarService.swift */; };
 		A1000027238F4A0100000001 /* PDFGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000026238F4A0100000001 /* PDFGenerator.swift */; };
+		A1000029238F4A0100000001 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000028238F4A0100000001 /* DesignSystem.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		A1000019238F4A0100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1000024238F4A0100000001 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		A1000026238F4A0100000001 /* PDFGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFGenerator.swift; sourceTree = "<group>"; };
+		A1000028238F4A0100000001 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000002238F4A0100000001 /* VoiceDigestApp.swift */,
+				A1000028238F4A0100000001 /* DesignSystem.swift */,
 				A1000020238F4A0100000001 /* Models */,
 				A1000021238F4A0100000001 /* Services */,
 				A1000022238F4A0100000001 /* ViewModels */,
@@ -193,6 +196,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000001238F4A0100000001 /* VoiceDigestApp.swift in Sources */,
+				A1000029238F4A0100000001 /* DesignSystem.swift in Sources */,
 				A1000003238F4A0100000001 /* ContentView.swift in Sources */,
 				A1000007238F4A0100000001 /* VoiceNote.swift in Sources */,
 				A1000009238F4A0100000001 /* AudioRecorder.swift in Sources */,
