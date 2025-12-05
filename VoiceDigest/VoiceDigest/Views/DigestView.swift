@@ -1,10 +1,13 @@
 import SwiftUI
+import UIKit
 
 struct DigestView: View {
     @Environment(VoiceNoteManager.self) private var manager
 
     @State private var selectedDigest: DailyDigest?
     @State private var showingDigestDetail = false
+    @State private var pdfToShare: Data?
+    @State private var showingShareSheet = false
 
     var body: some View {
         NavigationStack {
@@ -20,9 +23,23 @@ struct DigestView: View {
             }
             .navigationTitle("Digest")
             .sheet(item: $selectedDigest) { digest in
-                DigestDetailView(digest: digest)
+                DigestDetailView(digest: digest, onShare: {
+                    shareDigest(digest)
+                })
+            }
+            .sheet(isPresented: $showingShareSheet) {
+                if let pdfData = pdfToShare {
+                    ShareSheet(items: [pdfData])
+                }
             }
         }
+    }
+
+    // MARK: - Share Functionality
+
+    private func shareDigest(_ digest: DailyDigest) {
+        pdfToShare = PDFGenerator.generateDigestPDF(from: digest)
+        showingShareSheet = true
     }
 
     // MARK: - Today's Section
@@ -110,10 +127,12 @@ struct DigestView: View {
             } else {
                 LazyVStack(spacing: 12) {
                     ForEach(manager.dailyDigests) { digest in
-                        DigestCard(digest: digest)
-                            .onTapGesture {
-                                selectedDigest = digest
-                            }
+                        DigestCard(digest: digest) {
+                            shareDigest(digest)
+                        }
+                        .onTapGesture {
+                            selectedDigest = digest
+                        }
                     }
                 }
             }
@@ -188,6 +207,7 @@ struct TimeOfDaySectionCard: View {
 
 struct DigestCard: View {
     let digest: DailyDigest
+    var onShare: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -203,6 +223,18 @@ struct DigestCard: View {
                 }
 
                 Spacer()
+
+                // Share button
+                if let onShare = onShare {
+                    Button {
+                        onShare()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.body)
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
@@ -241,6 +273,19 @@ struct DigestCard: View {
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
+}
+
+// MARK: - Share Sheet
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 #Preview {

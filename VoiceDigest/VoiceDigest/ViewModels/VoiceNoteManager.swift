@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import UserNotifications
-import EventKit
 
 enum RecordingState: Equatable {
     case idle
@@ -69,7 +68,7 @@ final class VoiceNoteManager {
     let audioRecorder = AudioRecorder()
     let speechRecognizer = SpeechRecognizer()
     let textProcessor = TextProcessor()
-    let eventStore = EKEventStore()
+    let calendarService = CalendarService()
 
     // MARK: - State
 
@@ -77,10 +76,15 @@ final class VoiceNoteManager {
     var voiceNotes: [VoiceNote] = []
     var dailyDigests: [DailyDigest] = []
     var statistics: AppStatistics = AppStatistics()
-    var hasCalendarPermission = false
 
     var toastMessage: ToastMessage?
     var showToast = false
+
+    // MARK: - Calendar State
+
+    var hasCalendarPermission: Bool {
+        calendarService.hasPermission
+    }
 
     // MARK: - Settings
 
@@ -160,27 +164,7 @@ final class VoiceNoteManager {
     }
 
     func requestCalendarPermission() async {
-        if #available(iOS 17.0, *) {
-            do {
-                let granted = try await eventStore.requestFullAccessToEvents()
-                await MainActor.run {
-                    hasCalendarPermission = granted
-                }
-            } catch {
-                await MainActor.run {
-                    hasCalendarPermission = false
-                }
-            }
-        } else {
-            let granted = await withCheckedContinuation { continuation in
-                eventStore.requestAccess(to: .event) { granted, _ in
-                    continuation.resume(returning: granted)
-                }
-            }
-            await MainActor.run {
-                hasCalendarPermission = granted
-            }
-        }
+        _ = await calendarService.requestPermission()
     }
 
     // MARK: - Recording
@@ -331,30 +315,10 @@ final class VoiceNoteManager {
             return
         }
 
-        let event = EKEvent(eventStore: eventStore)
-        event.title = textProcessor.abridgeContent(note.cleanedContent)
-
-        // Use actionable date if available, otherwise use 1 hour from now
-        if let actionableDate = note.actionableDate {
-            event.startDate = actionableDate
-            event.endDate = actionableDate.addingTimeInterval(3600) // 1 hour duration
-        } else {
-            let startDate = Date().addingTimeInterval(3600)
-            event.startDate = startDate
-            event.endDate = startDate.addingTimeInterval(3600)
-        }
-
-        event.notes = note.cleanedContent
-        event.calendar = eventStore.defaultCalendarForNewEvents
-
-        // Add a reminder 15 minutes before
-        let alarm = EKAlarm(relativeOffset: -900)
-        event.addAlarm(alarm)
-
-        do {
-            try eventStore.save(event, span: .thisEvent)
+        let success = calendarService.createEventFromNote(note)
+        if success {
             showToast(message: .addedToCalendar)
-        } catch {
+        } else {
             showToast(message: .error("Failed to add to calendar"))
         }
     }
@@ -365,22 +329,22 @@ final class VoiceNoteManager {
             return
         }
 
-        let event = EKEvent(eventStore: eventStore)
-        event.title = textProcessor.abridgeContent(note.cleanedContent)
-        event.startDate = date
-        event.endDate = date.addingTimeInterval(3600)
-        event.notes = note.cleanedContent
-        event.calendar = eventStore.defaultCalendarForNewEvents
+        let title = textProcessor.abridgeContent(note.cleanedContent)
+        let success = calendarService.createEvent(
+            title: title,
+            notes: note.cleanedContent,
+            date: date
+        )
 
-        let alarm = EKAlarm(relativeOffset: -900)
-        event.addAlarm(alarm)
-
-        do {
-            try eventStore.save(event, span: .thisEvent)
+        if success {
             showToast(message: .addedToCalendar)
-        } catch {
+        } else {
             showToast(message: .error("Failed to add to calendar"))
         }
+    }
+
+    func autoSyncToCalendar(note: VoiceNote) -> Bool {
+        return calendarService.autoSyncIfDateDetected(note)
     }
 
     // MARK: - Digest Generation

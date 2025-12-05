@@ -3,12 +3,16 @@ import Speech
 
 struct SettingsView: View {
     @Environment(VoiceNoteManager.self) private var manager
+    @AppStorage("autoSyncCalendar") private var autoSyncCalendar = false
 
     var body: some View {
         NavigationStack {
             List {
                 // Notifications section
                 notificationsSection
+
+                // Calendar section
+                calendarSection
 
                 // Permissions section
                 permissionsSection
@@ -39,6 +43,51 @@ struct SettingsView: View {
             Text("Notifications")
         } footer: {
             Text("You'll receive a notification at this time to review your daily digest.")
+        }
+    }
+
+    // MARK: - Calendar Section
+
+    private var calendarSection: some View {
+        Section {
+            Toggle(isOn: $autoSyncCalendar) {
+                Label("Auto-Sync Dates to Calendar", systemImage: "calendar.badge.plus")
+            }
+            .onChange(of: autoSyncCalendar) { _, newValue in
+                if newValue && !manager.hasCalendarPermission {
+                    Task {
+                        await manager.requestCalendarPermission()
+                        if !manager.hasCalendarPermission {
+                            autoSyncCalendar = false
+                        }
+                    }
+                }
+            }
+
+            // Calendar permission status
+            HStack {
+                Label("Calendar Access", systemImage: "calendar")
+
+                Spacer()
+
+                if manager.hasCalendarPermission {
+                    Label("Authorized", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    Button("Enable") {
+                        Task {
+                            await manager.requestCalendarPermission()
+                        }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                }
+            }
+        } header: {
+            Text("Calendar")
+        } footer: {
+            Text("When enabled, voice notes with detected dates will automatically be added to your calendar.")
         }
     }
 

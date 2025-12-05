@@ -213,6 +213,7 @@ struct NoteCardView: View {
 struct DigestDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let digest: DailyDigest
+    var onShare: (() -> Void)?
 
     var body: some View {
         NavigationStack {
@@ -228,6 +229,19 @@ struct DigestDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal)
+
+                    // Summary
+                    if !digest.summary.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Summary", systemImage: "text.alignleft")
+                                .font(.headline)
+
+                            Text(digest.summary)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
 
                     // Top keywords
                     if !digest.topKeywords.isEmpty {
@@ -293,6 +307,19 @@ struct DigestDetailView: View {
             .navigationTitle("Daily Digest")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if let onShare = onShare {
+                        Button {
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                onShare()
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()
