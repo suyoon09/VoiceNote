@@ -307,6 +307,12 @@ final class VoiceNoteManager {
         showToast(message: .noteDeleted)
     }
 
+    func updateCategory(for noteID: UUID, to category: NoteCategory) {
+        guard let index = voiceNotes.firstIndex(where: { $0.id == noteID }) else { return }
+        voiceNotes[index].category = category
+        saveNotes()
+    }
+
     // MARK: - Calendar Integration
 
     func addToCalendar(note: VoiceNote) {

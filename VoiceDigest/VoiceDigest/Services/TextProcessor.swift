@@ -57,43 +57,39 @@ final class TextProcessor {
         "return": "Return"
     ]
 
-    // MARK: - Category Keywords
+    // MARK: - Category Keywords (3 Categories: Event, Task, Note)
 
     private static let categoryKeywords: [NoteCategory: Set<String>] = [
-        .work: Set([
-            "meeting", "meetings", "project", "projects", "deadline", "deadlines",
-            "email", "emails", "client", "clients", "boss", "office",
-            "presentation", "presentations", "report", "reports", "team",
-            "colleague", "colleagues", "schedule", "conference", "budget",
-            "work", "job", "manager", "employee", "company", "business",
-            "call", "calls", "memo", "agenda", "proposal", "contract",
-            "stakeholder", "deliverable", "milestone", "review"
+        .event: Set([
+            // Meetings & Appointments
+            "meeting", "meetings", "appointment", "appointments",
+            "conference", "call", "calls", "interview", "interviews",
+            // Time-based events
+            "tomorrow", "today", "tonight", "monday", "tuesday", "wednesday",
+            "thursday", "friday", "saturday", "sunday", "next week",
+            "this week", "next month", "at noon", "o'clock", "am", "pm",
+            // Social events
+            "party", "dinner", "lunch", "breakfast", "brunch",
+            "birthday", "anniversary", "wedding", "celebration",
+            "date", "hangout", "get together",
+            // Travel & Scheduled
+            "flight", "trip", "travel", "vacation", "holiday",
+            "reservation", "booking", "scheduled", "schedule"
         ]),
-        .tasks: Set([
+        .task: Set([
+            // Action verbs
             "need to", "have to", "must", "should", "remember",
-            "don't forget", "buy", "call", "send", "finish",
-            "complete", "todo", "to-do", "remind", "reminder",
-            "pick up", "drop off", "schedule", "book", "make",
-            "get", "grab", "return", "pay", "submit", "fix",
-            "clean", "organize", "prepare", "check", "update"
-        ]),
-        .ideas: Set([
-            "idea", "ideas", "what if", "maybe", "could",
-            "might", "think about", "consider", "concept",
-            "imagine", "create", "build", "invention", "thought",
-            "brainstorm", "innovation", "creative", "design",
-            "develop", "explore", "experiment", "try", "possible",
-            "potential", "inspiration", "vision", "plan"
-        ]),
-        .personal: Set([
-            "family", "friend", "friends", "home", "weekend",
-            "vacation", "birthday", "dinner", "lunch", "movie",
-            "hobby", "health", "exercise", "doctor", "personal",
-            "mom", "dad", "wife", "husband", "kid", "kids",
-            "children", "brother", "sister", "party", "date",
-            "gym", "workout", "sleep", "relax", "fun",
-            "trip", "travel", "holiday", "anniversary", "wedding"
+            "don't forget", "remind", "reminder", "todo", "to-do",
+            // Shopping & Errands
+            "buy", "pick up", "drop off", "get", "grab", "return",
+            "groceries", "grocery", "shopping", "store",
+            // Work tasks
+            "send", "finish", "complete", "submit", "fix", "update",
+            "review", "prepare", "check", "email", "call back",
+            // Household
+            "clean", "organize", "pay", "book", "make", "cancel"
         ])
+        // .note is the default - no keywords needed
     ]
 
     // MARK: - Transcript Cleanup
@@ -259,6 +255,7 @@ final class TextProcessor {
             var score = 0
             for keyword in keywords {
                 if lowercasedText.contains(keyword) {
+                    // Multi-word phrases get higher weight
                     score += keyword.contains(" ") ? 3 : 1
                 }
             }
@@ -269,7 +266,8 @@ final class TextProcessor {
             return category
         }
 
-        return .uncategorized
+        // Default to .note if no specific category detected
+        return .note
     }
 
     // MARK: - Keyword Extraction

@@ -60,12 +60,10 @@ struct AppColors {
     /// Subtle divider color
     static let divider = Color(hex: "E5E7EB")
 
-    /// Category colors (more muted, sophisticated)
-    static let categoryWork = Color(hex: "3B82F6")
-    static let categoryPersonal = Color(hex: "10B981")
-    static let categoryIdeas = Color(hex: "F59E0B")
-    static let categoryTasks = Color(hex: "F97316")
-    static let categoryUncategorized = Color(hex: "6B7280")
+    /// Category colors (3 categories: Event, Task, Note)
+    static let categoryEvent = Color(hex: "8B5CF6")   // Purple/Indigo
+    static let categoryTask = Color(hex: "F97316")    // Orange/Amber
+    static let categoryNote = Color(hex: "14B8A6")    // Blue/Teal
 
     /// Time of day colors
     static let morning = Color(hex: "FB923C")
@@ -273,16 +271,12 @@ struct WatermarkFooter: View {
 extension NoteCategory {
     var sophisticatedColor: Color {
         switch self {
-        case .work:
-            return AppColors.categoryWork
-        case .personal:
-            return AppColors.categoryPersonal
-        case .ideas:
-            return AppColors.categoryIdeas
-        case .tasks:
-            return AppColors.categoryTasks
-        case .uncategorized:
-            return AppColors.categoryUncategorized
+        case .event:
+            return AppColors.categoryEvent
+        case .task:
+            return AppColors.categoryTask
+        case .note:
+            return AppColors.categoryNote
         }
     }
 }

@@ -163,9 +163,8 @@ struct PremiumNoteCard: View {
 
                 Spacer()
 
-                // Subtle category tag
-                Text(note.category.rawValue)
-                    .subtleTag(color: note.category.sophisticatedColor)
+                // Interactive category pill with Menu
+                CategoryPill(note: note)
             }
 
             // Content
@@ -222,6 +221,49 @@ struct PremiumNoteCard: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+// MARK: - Interactive Category Pill
+
+struct CategoryPill: View {
+    @Environment(VoiceNoteManager.self) private var manager
+    let note: VoiceNote
+
+    var body: some View {
+        Menu {
+            ForEach(NoteCategory.allCases) { category in
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        manager.updateCategory(for: note.id, to: category)
+                    }
+                    // Haptic feedback
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
+                } label: {
+                    HStack {
+                        Text(category.emoji)
+                        Text(category.rawValue)
+                        if note.category == category {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: note.category.icon)
+                    .font(.system(size: 10, weight: .medium))
+                Text(note.category.rawValue)
+                    .font(AppTypography.captionSmall)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(note.category.sophisticatedColor.opacity(0.12))
+            .foregroundStyle(note.category.sophisticatedColor)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 

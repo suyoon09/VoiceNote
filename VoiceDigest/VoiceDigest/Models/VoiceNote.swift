@@ -3,41 +3,33 @@ import Foundation
 // MARK: - Note Category
 
 enum NoteCategory: String, Codable, CaseIterable, Identifiable {
-    case work = "Work"
-    case personal = "Personal"
-    case ideas = "Ideas"
-    case tasks = "Tasks"
-    case uncategorized = "Uncategorized"
+    case event = "Event"
+    case task = "Task"
+    case note = "Note"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .work: return "briefcase.fill"
-        case .personal: return "house.fill"
-        case .ideas: return "lightbulb.fill"
-        case .tasks: return "checkmark.circle.fill"
-        case .uncategorized: return "doc.text.fill"
+        case .event: return "calendar"
+        case .task: return "checkmark.circle"
+        case .note: return "note.text"
         }
     }
 
     var emoji: String {
         switch self {
-        case .work: return "💼"
-        case .personal: return "🏠"
-        case .ideas: return "💡"
-        case .tasks: return "✅"
-        case .uncategorized: return "📝"
+        case .event: return "📅"
+        case .task: return "✅"
+        case .note: return "📝"
         }
     }
 
     var color: String {
         switch self {
-        case .work: return "blue"
-        case .personal: return "green"
-        case .ideas: return "yellow"
-        case .tasks: return "orange"
-        case .uncategorized: return "gray"
+        case .event: return "purple"
+        case .task: return "orange"
+        case .note: return "blue"
         }
     }
 }
@@ -63,7 +55,7 @@ struct VoiceNote: Identifiable, Codable, Equatable {
         rawTranscript: String = "",
         cleanedContent: String = "",
         keywords: [String] = [],
-        category: NoteCategory = .uncategorized,
+        category: NoteCategory = .note,
         isProcessed: Bool = false,
         duration: TimeInterval = 0,
         actionableDate: Date? = nil
